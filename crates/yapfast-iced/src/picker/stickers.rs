@@ -340,7 +340,10 @@ impl<'a> View<'a> {
                                 .bare()
                         )
                     ];
-                    if !usable {
+                    // One that goes as a link where it isn't usable shows
+                    // as any other: no veil, no lock.
+                    let pickable = *usable || link.is_some();
+                    if !pickable {
                         // Greyed, as at 40%: the panel's ground over it.
                         let veil = crate::style::faded(theme.raised, 0.6);
                         face = face.push(
@@ -360,10 +363,7 @@ impl<'a> View<'a> {
                         .padding(0)
                         .width(TILE)
                         .height(TILE)
-                        .on_press_maybe(
-                            (*usable || link.is_some())
-                                .then_some(Message::Picker(Event::Pick(index))),
-                        )
+                        .on_press_maybe(pickable.then_some(Message::Picker(Event::Pick(index))))
                         .style(lit_style(None, hover, 8.0));
                     let mut layers = stack![tile];
                     if picker.hover == Some(index) {

@@ -623,7 +623,11 @@ impl<'a> View<'a> {
                     usable,
                     favorite,
                 } => {
-                    let fade = if *usable { 1.0 } else { 0.4 };
+                    // One that goes as a link where it isn't usable shows
+                    // as any other: no grey, no lock.
+                    let pickable =
+                        *usable || (matches!(face, Face::Custom(_)) && picker.links_emoji(false));
+                    let fade = if pickable { 1.0 } else { 0.4 };
                     // An animated custom emoji plays in its cell, greyed
                     // or not; the rail and the foot show its still.
                     let playing = match face {
@@ -637,7 +641,7 @@ impl<'a> View<'a> {
                         None => self.face_view(tab, face, CELL, GLYPH, fade),
                     };
                     let mut face_shown = stack![shown];
-                    if !usable {
+                    if !pickable {
                         face_shown = face_shown.push(kit::pinned(
                             self.cx.look.glyph(Icon::Lock, 14, theme.text),
                             Alignment::End,
@@ -649,11 +653,7 @@ impl<'a> View<'a> {
                         .padding(0)
                         .width(CELL)
                         .height(CELL)
-                        .on_press_maybe(
-                            (*usable
-                                || (matches!(face, Face::Custom(_)) && picker.links_emoji(false)))
-                            .then_some(Message::Picker(Event::Pick(index))),
-                        )
+                        .on_press_maybe(pickable.then_some(Message::Picker(Event::Pick(index))))
                         .style(lit_style(None, wash, 6.0));
                     let mut layers = stack![cell];
                     if *favorite || picker.hover == Some(index) {
