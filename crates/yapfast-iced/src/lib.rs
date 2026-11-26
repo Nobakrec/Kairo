@@ -73,6 +73,7 @@ mod header;
 use yapfast_iced_kit::icons;
 mod image_viewer;
 mod info_cards;
+mod kairo;
 mod layout;
 mod link_dialogs;
 mod links;

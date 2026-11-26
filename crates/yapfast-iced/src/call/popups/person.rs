@@ -227,7 +227,7 @@ pub fn volumes_view<'a>(ctx: crate::ctx::Ctx<'a>, volumes: &'a Volumes) -> Eleme
         controls::slider(
             label,
             value,
-            yapfast_core::volume::PERSON_SLIDER,
+            ctx.layout.kairo.person_slider(),
             move |value| Message::Call(Event::Volume(stream, value, false)),
         )
         .on_release(Message::Call(Event::Volume(stream, value, true)))

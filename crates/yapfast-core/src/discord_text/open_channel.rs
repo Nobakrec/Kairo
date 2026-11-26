@@ -910,6 +910,21 @@ impl OpenChannel {
         let Some(id) = sent_id(item).map(str::to_owned) else {
             return;
         };
+        // Deleted here, so the message logger lets it go.
+        yapfast_discord::message_log::dismiss(&id);
+        // One the message logger kept is already gone from Discord: it
+        // only leaves the log.
+        if self
+            .message(id.parse().unwrap_or_default())
+            .is_some_and(|message| message.deleted)
+        {
+            let _ = done.send(Done::Deleted {
+                room: self.room.clone(),
+                id,
+                result: Ok(()),
+            });
+            return;
+        }
         let (discord, done) = (discord.clone(), done.clone());
         let (room, channel) = (self.room.clone(), self.channel.clone());
         tokio::spawn(async move {
@@ -1637,6 +1652,7 @@ impl OpenChannel {
                     let (body, emoji) =
                         reply_snippet(discord, server.map(|server| &**server), &original.content);
                     Some(Reply {
+                        sent: yapfast_discord::message::snowflake_ms(id) / 1000,
                         author: name(&original.author_id, &original.author),
                         avatar: Some(discord.avatar(Some(&self.guild), &original.author_id)),
                         body,
@@ -1774,6 +1790,7 @@ impl OpenChannel {
             } => {
                 let (body, emoji) = reply_snippet(discord, server, content);
                 Reply {
+                    sent: yapfast_discord::message::snowflake_ms(id) / 1000,
                     author: name(author_id, author),
                     avatar: Some(discord.avatar(Some(&self.guild), author_id)),
                     body,
@@ -1784,6 +1801,7 @@ impl OpenChannel {
                 }
             }
             DiscordReply::Deleted => Reply {
+                sent: 0,
                 author: String::new(),
                 avatar: None,
                 body: "The original message was deleted.".into(),
@@ -1793,6 +1811,7 @@ impl OpenChannel {
                 tag: None,
             },
             DiscordReply::Unknown { id } => Reply {
+                sent: 0,
                 author: String::new(),
                 avatar: None,
                 body: if id.is_empty() || self.originals.get(id) == Some(&true) {
@@ -1813,6 +1832,10 @@ impl OpenChannel {
         // Discord's client: Discord has no copy to reply to, react to, pin
         // or delete.
         let shared = !message.ephemeral;
+        // Their username, for Kairo to show beside a nickname that isn't it.
+        let username = discord
+            .username(&message.author_id)
+            .filter(|username| !username.eq_ignore_ascii_case(&author));
         ChatMessage {
             id,
             item: format!("d:{}", message.id),
@@ -1852,7 +1875,15 @@ impl OpenChannel {
             timestamp,
             own,
             edited: message.edited,
-            deleted: false,
+            deleted: message.deleted,
+            logged: message.deleted,
+            edits: message
+                .history
+                .iter()
+                .map(|before| rendered(discord, server, before).0)
+                .collect(),
+            username,
+            raw: message.content.clone(),
             blocked: snapshot.blocked.contains(&message.author_id),
             ignored: snapshot.ignored.contains(&message.author_id),
             mentions_me: message.highlights_me(me, marks),
@@ -2042,10 +2073,26 @@ fn change(messages: &mut BTreeMap<u64, Message>, channel: &str, event: &Live) ->
                 Some(poll) if !poll.counted => known.poll.take(),
                 poll => poll.clone(),
             };
+            // The message logger keeps what it said before; an update
+            // that only adds embeds says the same.
+            // Only a real edit counts: Discord also updates a message when
+            // a link's preview arrives, and a link the preview shows (a GIF,
+            // a sticker's or an emoji's picture) leaves its text then.
+            let mut history = std::mem::take(&mut known.history);
+            if yapfast_discord::message_log::enabled()
+                && message.edited
+                && !known.content.is_empty()
+                && !message.content.is_empty()
+                && known.content != message.content
+            {
+                history.push(std::mem::take(&mut known.content));
+            }
             *known = Message {
                 reactions,
                 poll,
                 reply,
+                history,
+                deleted: known.deleted,
                 ..message.clone()
             };
             Some(message.order())
@@ -2066,6 +2113,16 @@ fn change(messages: &mut BTreeMap<u64, Message>, channel: &str, event: &Live) ->
             id: message,
         } if id == channel => {
             let order = message.parse().unwrap_or_default();
+            // The message logger keeps it, marked deleted, unless this
+            // account deleted it.
+            if yapfast_discord::message_log::keeps(message)
+                && messages.get(&order).is_some_and(|known| {
+                    !(known.bot && yapfast_discord::message_log::ignores_bots())
+                })
+            {
+                let known = messages.get_mut(&order)?;
+                return (!std::mem::replace(&mut known.deleted, true)).then_some(order);
+            }
             messages.remove(&order).map(|_| order)
         }
         Live::Reaction {

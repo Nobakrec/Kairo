@@ -343,6 +343,11 @@ pub enum Icon {
     Refresh,
     LogOut,
     UserPen,
+    /// A phone, a desktop screen and a globe: the devices someone is on,
+    /// as Vencord's PlatformIndicators shows them beside a name.
+    Smartphone,
+    Monitor,
+    Globe,
     Ban,
     GitHub,
     Image,
@@ -468,6 +473,15 @@ impl Icon {
             Icon::Gamepad => icon!("gamepad.svg"),
             Icon::Music => icon!("music.svg"),
             Icon::Tv => icon!("tv.svg"),
+            Icon::Smartphone => {
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M8.5 2h7A2.5 2.5 0 0 1 18 4.5v15a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 6 19.5v-15A2.5 2.5 0 0 1 8.5 2M8 5v12h8V5zm4 13.25a1 1 0 1 0 0 2 1 1 0 0 0 0-2"/></svg>"#
+            }
+            Icon::Monitor => {
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M4.5 3h15A2.5 2.5 0 0 1 22 5.5v9a2.5 2.5 0 0 1-2.5 2.5H14v2h3a1 1 0 1 1 0 2H7a1 1 0 1 1 0-2h3v-2H4.5A2.5 2.5 0 0 1 2 14.5v-9A2.5 2.5 0 0 1 4.5 3M4 5v10h16V5z"/></svg>"#
+            }
+            Icon::Globe => {
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.75 5.6 3.75 9S14.5 18.4 12 21M12 3c-2.5 2.6-3.75 5.6-3.75 9S9.5 18.4 12 21"/></svg>"#
+            }
             Icon::Video => icon!("video.svg"),
             Icon::Trophy => icon!("trophy.svg"),
             Icon::Logo => icon!("logo.svg"),

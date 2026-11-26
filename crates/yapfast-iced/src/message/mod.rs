@@ -183,7 +183,11 @@ pub fn message_content<'a>(
             .align_y(Alignment::Center),
         );
     }
-    let ink = if message.deleted || message.delivery != chat::Delivery::default() {
+    let ink = if message.logged {
+        // Kept by the message logger: red, as Vencord's MessageLogger shows
+        // a deleted message.
+        theme.danger
+    } else if message.deleted || message.delivery != chat::Delivery::default() {
         theme.muted
     } else if message.notice.is_some() {
         theme.secondary
@@ -196,6 +200,27 @@ pub fn message_content<'a>(
         theme.text
     };
     let editing = ctx.composer.editing.as_deref() == Some(message.item.as_str());
+    // What it said before each edit, as the message logger kept it, over
+    // what it says now.
+    if !editing {
+        for before in &message.edits {
+            content = content.push(
+                row![
+                    text(before.as_str())
+                        .size(text_size(ctx))
+                        .font(theme.font("body", REGULAR))
+                        .color(theme.faint),
+                    text("(edited)")
+                        .size(theme.type_size("small", 10.0))
+                        .font(theme.font("small", REGULAR))
+                        .color(theme.faint),
+                ]
+                .spacing(4)
+                .align_y(Alignment::End)
+                .wrap(),
+            );
+        }
+    }
     if editing {
         content = content.push(crate::edit::inline_edit(ctx));
     } else if !look.body.parts.is_empty() && !look.body.plain().is_empty() {
@@ -226,6 +251,20 @@ pub fn message_content<'a>(
                 .color(theme.muted),
         );
     }
+    // A deleted message of pictures or files alone, which has no text to
+    // turn red, says so.
+    if message.logged
+        && ctx.layout.kairo.deleted_tag
+        && (look.body.parts.is_empty() || look.body.plain().is_empty())
+    {
+        content = content.push(
+            text("(deleted)")
+                .size(theme.type_size("small", 12.0))
+                .font(theme.font("small", REGULAR))
+                .color(theme.danger),
+        );
+    }
+
     let gallery = Gallery::of(
         &message.attachments,
         Placement::Message,
@@ -1067,6 +1106,19 @@ fn reply_line<'a>(
                 tag,
             ));
         }
+        // When the original was sent, as Kairo's reply times show it.
+        if ctx.layout.kairo.reply_timestamps && reply.sent > 0 {
+            line = line.push(
+                text(yapfast_core::clock::time_on(
+                    reply.sent,
+                    ctx.layout.prefs.twelve_hour_clock,
+                ))
+                .size(theme.type_size("small", 12.0))
+                .font(theme.font("small", REGULAR))
+                .color(theme.faint)
+                .wrapping(text::Wrapping::None),
+            );
+        }
     }
     line = line.push(
         container(ctx.inline_emoji_line(
@@ -1331,6 +1383,18 @@ fn author_line<'a>(
     let mut line = row![person_menu(ctx, index, message, name)]
         .spacing(8)
         .align_y(Alignment::Center);
+    // Their username beside a nickname that isn't it, as Kairo shows it.
+    if ctx.layout.kairo.show_usernames
+        && let Some(username) = &message.username
+    {
+        line = line.push(
+            text(username.as_str())
+                .size(theme.type_size("small", 13.0))
+                .font(theme.font("small", REGULAR))
+                .color(theme.muted)
+                .wrapping(text::Wrapping::None),
+        );
+    }
     if let Some(tag) = cosmetics.tag(message.tag.as_ref()) {
         let size = text_size(ctx) * 0.72;
         let chip = ctx.tag_chip(

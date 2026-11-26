@@ -418,6 +418,18 @@ pub fn row_height(
     if look.body.jumbo {
         content *= 2.2;
     }
+    // What it said before each edit, as the message logger kept it.
+    content += message
+        .edits
+        .iter()
+        .map(|before| {
+            before
+                .split('\n')
+                .map(|line| (line.chars().count() + 9).div_ceil(per_line).max(1))
+                .sum::<usize>() as f32
+                * LINE_HEIGHT
+        })
+        .sum::<f32>();
     let header = message.reply.is_some() || message.used.is_some();
     if header {
         content += LINE_HEIGHT;

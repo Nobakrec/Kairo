@@ -145,6 +145,9 @@ pub struct Layout {
     /// What Settings' other pages keep; see [`Prefs`].
     #[serde(flatten)]
     pub prefs: Prefs,
+    /// Kairo's own features' switches, under `kairo`; see
+    /// [`crate::kairo::Kairo`].
+    pub kairo: crate::kairo::Kairo,
 }
 
 /// The window's size while it isn't maximized, in the desktop's own units

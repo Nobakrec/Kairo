@@ -1271,6 +1271,9 @@ impl<'a> View<'a> {
         if let Some(title) = self.title_line() {
             contents = contents.push(title);
         }
+        if let Some(counts) = self.counts_line() {
+            contents = contents.push(counts);
+        }
         if themed_rows.is_none_or(|rows| rows.activity) {
             contents = contents.push(self.activity_panel());
         }
@@ -1592,6 +1595,53 @@ impl<'a> View<'a> {
     /// A package's optional line above the member list, such as `$ who`.
     /// Stock themes do not grow a new header: the row exists only when the
     /// installed package supplied `chrome.labels.members_title`.
+    /// How many of the server's members are online, and how many it has,
+    /// as Vencord's MemberCount shows them over the list: from the counts
+    /// in the groups' headings, Offline's the rest. A server too large for
+    /// Discord to list its offline members shows only who's online; a group
+    /// DM, whose one heading is Members, shows nothing.
+    fn counts_line(self) -> Option<Element<'a, Message>> {
+        if !self.cx.layout.kairo.member_count {
+            return None;
+        }
+        let (online, offline) = member_counts(&self.s.lines)?;
+        let theme = self.cx.look.theme;
+        let size = theme.type_size("small", 12.0);
+        let font = theme.font("small", SEMIBOLD);
+        let dot = |ink: Color| {
+            container(Space::new()).width(8).height(8).style(move |_| {
+                iced::widget::container::Style {
+                    background: Some(ink.into()),
+                    border: iced::Border {
+                        radius: 4.0.into(),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }
+            })
+        };
+        let words = |words: String| text(words).size(size).font(font).color(theme.muted);
+        let mut line = row![dot(theme.live), words(format!("{online} Online"))]
+            .spacing(6)
+            .align_y(Alignment::Center);
+        if let Some(offline) = offline {
+            line = line
+                .push(Space::new().width(6))
+                .push(dot(theme.faint))
+                .push(words(format!("{} Members", online + offline)));
+        }
+        Some(
+            container(line)
+                .padding(Padding {
+                    top: 12.0,
+                    bottom: 0.0,
+                    left: 16.0,
+                    right: 16.0,
+                })
+                .into(),
+        )
+    }
+
     fn title_line(self) -> Option<Element<'a, Message>> {
         let theme = self.cx.look.theme;
         let chrome = self.cx.themes.chrome(&theme.id)?;
@@ -2409,6 +2459,15 @@ impl<'a> View<'a> {
         if look.timed_out {
             name_line = name_line.push(self.cx.look.glyph(Icon::Clock, 14, theme.danger));
         }
+        let platforms = if self.cx.layout.kairo.platform_indicators {
+            platform_marks(&look.id)
+        } else {
+            Vec::new()
+        };
+        for (icon, status) in platforms {
+            let ink = platform_ink(theme, status);
+            name_line = name_line.push(self.cx.look.glyph(icon, 14, ink).opacity(opacity));
+        }
         let mut person = Person::new(face, name_line);
         person.gap = themed
             .and_then(|rows| rows.avatar.gap)
@@ -2988,5 +3047,89 @@ mod tests {
             policy_palette(Nameplates::Hide, Some(palette), accent),
             None
         );
+    }
+}
+
+/// The devices someone is on, as Vencord's PlatformIndicators marks them
+/// beside their name: desktop, then web, then phone, each in the colour of
+/// their status there.
+fn platform_marks(user: &str) -> Vec<(Icon, yapfast_core::yapfast_discord::platforms::Status)> {
+    let platforms = yapfast_core::yapfast_discord::platforms::get(user);
+    [
+        (Icon::Monitor, platforms.desktop),
+        (Icon::Globe, platforms.web),
+        (Icon::Smartphone, platforms.mobile),
+    ]
+    .into_iter()
+    .filter_map(|(icon, status)| Some((icon, status?)))
+    .collect()
+}
+
+/// A device's mark's colour: green online, yellow idle, red do not disturb.
+fn platform_ink(
+    theme: &crate::theme::Theme,
+    status: yapfast_core::yapfast_discord::platforms::Status,
+) -> iced::Color {
+    use yapfast_core::yapfast_discord::platforms::Status;
+    match status {
+        Status::Online => theme.live,
+        // Discord's idle yellow, as the status dot's.
+        Status::Idle => crate::style::hex(0xf0b232),
+        Status::DoNotDisturb => theme.danger,
+    }
+}
+
+/// The online and offline counts of a server's member list, from its
+/// groups' headings ("Admins — 3", "Online — 12", "Offline — 40"): every
+/// group but Offline is online. Offline is none when Discord leaves it out,
+/// as for a large server. None without counted headings, or for a group
+/// DM's single Members heading.
+fn member_counts(lines: &[MemberLine]) -> Option<(u64, Option<u64>)> {
+    let mut groups = lines.iter().filter_map(|line| match line {
+        MemberLine::Heading { text, .. } => {
+            let (role, count) = yapfast_core::themes::chrome::split_group(text);
+            Some((role, count.parse::<u64>().ok()?))
+        }
+        MemberLine::Member(_) => None,
+    });
+    let (mut online, mut offline, mut any) = (0, None, false);
+    for (role, count) in groups.by_ref() {
+        if role == "Members" {
+            return None;
+        }
+        any = true;
+        if role == "Offline" {
+            *offline.get_or_insert(0) += count;
+        } else {
+            online += count;
+        }
+    }
+    any.then_some((online, offline))
+}
+
+#[cfg(test)]
+mod counts_tests {
+    use super::{MemberLine, member_counts};
+
+    fn heading(text: &str) -> MemberLine {
+        MemberLine::Heading {
+            text: text.into(),
+            icon: None,
+        }
+    }
+
+    #[test]
+    fn counts_online_and_members_from_the_headings() {
+        let lines = [
+            heading("Admins — 2"),
+            heading("Online — 10"),
+            heading("Offline — 30"),
+        ];
+        assert_eq!(member_counts(&lines), Some((12, Some(30))));
+        // A large server lists no offline members.
+        assert_eq!(member_counts(&lines[..2]), Some((12, None)));
+        // A group DM's one heading isn't a server's.
+        assert_eq!(member_counts(&[heading("Members — 3")]), None);
+        assert_eq!(member_counts(&[]), None);
     }
 }

@@ -294,6 +294,9 @@ impl MemberList {
         else {
             return false;
         };
+        if let Some(user) = data["user"]["id"].as_str() {
+            crate::platforms::record(user, data);
+        }
         let presence = Presence::parse(data);
         let activity = activity(&data["activities"]);
         let activities = activities(&data["activities"]);
@@ -384,6 +387,7 @@ fn row(guild: &str, item: &Value, names: &mut Names, people: &mut HashMap<String
     };
     names.learn_member(guild, member);
     let presence = &member["presence"];
+    crate::platforms::record(user, presence);
     people.insert(
         user.to_owned(),
         Person {

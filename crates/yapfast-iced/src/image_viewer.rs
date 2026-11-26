@@ -3,9 +3,10 @@
 //! full one only sharpens it), fitted beside the bars, its name and place
 //! among the message's pictures above, Save and Close, round buttons either
 //! side and the arrow keys stepping through the message's pictures, and a
-//! note while the full one loads or why it can't. A right click offers what
-//! the message's menu does for it. Escape, Close or a click outside closes
-//! it.
+//! note while the full one loads or why it can't. A still picture zooms
+//! with the wheel and moves with a drag once zoomed. A right click offers
+//! what the message's menu does for it. Escape, Close or a click outside
+//! closes it.
 //!
 //! Saving a file, from here, a file's card or a menu, asks where with the
 //! system's dialog, suggesting only the file's own name.
@@ -241,11 +242,27 @@ impl<'a> View<'a> {
             (natural.height * scale).round().max(1.0),
         );
         let shown = full.or(attachment.preview.as_ref());
-        let picture = self.cx.shot(Shot {
-            fit: Fit::Contain,
-            ground: false,
-            ..Shot::new(shown, size)
+        // A still zooms, as Kairo has it: the wheel zooms in up to 8 times
+        // about the pointer and back out, and a drag moves the zoomed
+        // picture about. An animation plays as it is.
+        let still = shown.filter(|picture| {
+            picture.animation.is_none() && picture.width > 0 && picture.height > 0
         });
+        let picture: Element<'a, Message> = match still {
+            Some(picture) => iced::widget::image::viewer(self.cx.own_size(picture))
+                .width(size.width)
+                .height(size.height)
+                .min_scale(1.0)
+                .max_scale(8.0)
+                .scale_step(0.25)
+                .content_fit(iced::ContentFit::Contain)
+                .into(),
+            None => self.cx.shot(Shot {
+                fit: Fit::Contain,
+                ground: false,
+                ..Shot::new(shown, size)
+            }),
+        };
         let (item, index) = (viewer.item.clone(), viewer.index);
         let picture = RightPress::new(picture, move |_| {
             Message::Image(Event::Menu(item.clone(), index, false))

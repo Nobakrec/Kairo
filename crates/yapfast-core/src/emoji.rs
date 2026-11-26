@@ -72,11 +72,21 @@ pub fn sticker_link(sticker: &crate::chat::Sticker) -> Option<String> {
     ))
 }
 
+static LINKS_ALWAYS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Whether every custom emoji and sticker goes as a link, even ones this
-/// account could use: set `YAPFAST_EMOJI_LINKS=always` to try links with
-/// Nitro. Without it, only the ones it can't use do.
+/// account could use, as Settings → Kairo can have it to try links with
+/// Nitro; `YAPFAST_EMOJI_LINKS=always` does too. Otherwise only the ones
+/// it can't use do.
 pub fn links_always() -> bool {
-    std::env::var("YAPFAST_EMOJI_LINKS").is_ok_and(|value| value == "always")
+    LINKS_ALWAYS.load(std::sync::atomic::Ordering::Relaxed)
+        || std::env::var("YAPFAST_EMOJI_LINKS").is_ok_and(|value| value == "always")
+}
+
+/// Has every custom emoji and sticker go as a link, or only those this
+/// account can't use.
+pub fn set_links_always(on: bool) {
+    LINKS_ALWAYS.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// An emoji's name as a picker shows it: "Thumbs up", or a custom one's

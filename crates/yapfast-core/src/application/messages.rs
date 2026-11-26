@@ -78,7 +78,8 @@ impl Application {
         if !self
             .state
             .message(&item)
-            .is_some_and(|message| message.can_delete)
+            // One the message logger kept goes from the log, whoever's.
+            .is_some_and(|message| message.can_delete || message.logged)
         {
             return vec![];
         }

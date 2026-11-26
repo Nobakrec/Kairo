@@ -425,10 +425,24 @@ pub fn open_menu(app: &mut App, index: usize, at: Point) -> Task<Message> {
     let Some(message) = crate::timeline::row_message(app, index).cloned() else {
         return Task::none();
     };
+    let row = MenuRow::new;
+    // One the message logger kept offers only to go from the log.
+    if message.logged {
+        app.win.menu = Some(Menu {
+            item: Some(message.item.clone()),
+            ..Menu::new(
+                at,
+                vec![MenuRow {
+                    danger: true,
+                    ..row(MenuAct::DeleteNow, "Remove from Log", Icon::Trash)
+                }],
+            )
+        });
+        return operation::focus(NOBODY);
+    }
     if message.deleted {
         return Task::none();
     }
-    let row = MenuRow::new;
     let mut rows = Vec::new();
     let state = app.client.state();
     let writes = crate::composer::composer_look(app.ctx()).enabled;
@@ -463,6 +477,11 @@ pub fn open_menu(app: &mut App, index: usize, at: Point) -> Task<Message> {
     }
     if !message.body.is_empty() {
         rows.push(row(MenuAct::CopyText, "Copy text", Icon::Copy));
+    }
+    // What its author wrote, mentions and emoji as Discord keeps them, as
+    // Kairo offers it.
+    if !message.raw.is_empty() {
+        rows.push(row(MenuAct::CopyTextLink, "Copy Raw Text", Icon::Copy).key(message.raw.clone()));
     }
     if crate::timeline::selection::copied_selection(app).is_some() {
         rows.push(row(

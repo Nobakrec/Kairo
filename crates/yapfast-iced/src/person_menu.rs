@@ -112,6 +112,8 @@ pub fn open_person_menu(
             row
         })
         .collect();
+    let mut rows = rows;
+    rows.extend(inspect_row(state, user));
     if rows.is_empty() {
         return Task::none();
     }
@@ -123,6 +125,83 @@ pub fn open_person_menu(
     // Its Apps follow the permissions as they are now.
     app.client.dispatch(Action::AskAppCommands);
     Task::batch([operation::focus(NOBODY), app.sync()])
+}
+
+/// Kairo's profile inspector, a Discord person's menu's Inspect Profile:
+/// their user ID, username and when the account was made, each copied by
+/// a click, their avatar at full size and their Discord page, opened in
+/// the browser. None for someone who isn't on Discord.
+fn inspect_row(state: &AppState, user: &str) -> Option<MenuRow> {
+    let id = yapfast_core::discord::sender_user(user).unwrap_or(user);
+    if id.is_empty() || !id.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let person = state.person(user);
+    let copy = |label: &'static str, value: String| MenuRow {
+        subtitle: Some(value.clone().into()),
+        ..MenuRow::plain(MenuAct::CopyTextLink, label).key(value)
+    };
+    let open =
+        |label: &'static str, link: String| MenuRow::plain(MenuAct::OpenTextLink, label).key(link);
+    let mut inspect = vec![copy("Copy User ID", id.to_owned())];
+    if let Some(username) = person.as_ref().and_then(|person| person.username.clone()) {
+        inspect.push(copy("Copy Username", username));
+    }
+    let created = yapfast_core::yapfast_discord::message::snowflake_ms(id) / 1000;
+    if let Some(day) = yapfast_core::clock::date(created) {
+        inspect.push(copy(
+            "Account Created",
+            day.format("%B %-d, %Y").to_string(),
+        ));
+    }
+    if let Some(avatar) = person
+        .as_ref()
+        .and_then(|person| person.avatar.as_deref())
+        .filter(|avatar| avatar.starts_with("https://"))
+    {
+        inspect.push(open("Open Avatar Full Size", full_size(avatar)));
+    }
+    inspect.push(open(
+        "Open Discord Profile Page",
+        format!("https://discord.com/users/{id}"),
+    ));
+    Some(MenuRow {
+        icon: Some(Icon::Search),
+        separated: true,
+        submenu: inspect,
+        ..MenuRow::plain(MenuAct::CopyTextLink, "Inspect Profile").key(id.to_owned())
+    })
+}
+
+/// A Discord picture's address at its largest, 4096 px: its `size` asked
+/// for so, or added.
+fn full_size(address: &str) -> String {
+    let (base, query) = address.split_once('?').unwrap_or((address, ""));
+    let mut kept: Vec<&str> = query
+        .split('&')
+        .filter(|pair| !pair.is_empty() && !pair.starts_with("size="))
+        .collect();
+    kept.push("size=4096");
+    format!("{base}?{}", kept.join("&"))
+}
+
+#[cfg(test)]
+mod inspect_tests {
+    #[test]
+    fn asks_for_the_largest_picture() {
+        assert_eq!(
+            super::full_size("https://cdn.discordapp.com/avatars/1/a.webp?size=80"),
+            "https://cdn.discordapp.com/avatars/1/a.webp?size=4096"
+        );
+        assert_eq!(
+            super::full_size("https://cdn.discordapp.com/avatars/1/a.png"),
+            "https://cdn.discordapp.com/avatars/1/a.png?size=4096"
+        );
+        assert_eq!(
+            super::full_size("https://cdn.discordapp.com/avatars/1/a.webp?animated=true&size=64"),
+            "https://cdn.discordapp.com/avatars/1/a.webp?animated=true&size=4096"
+        );
+    }
 }
 
 /// Whether each of the voice rows someone's menu offers is ticked, in the

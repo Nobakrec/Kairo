@@ -128,8 +128,10 @@ fn live_events_echoes_and_failed_sends() {
         channel: "11".into(),
         id: "3".into()
     }));
+    // The message logger keeps someone else's deleted message, marked.
     let order: Vec<_> = open.shown.messages.keys().copied().collect();
-    assert_eq!(order, [5, 7]);
+    assert_eq!(order, [3, 5, 7]);
+    assert!(open.shown.messages[&3].deleted);
 
     // A send that failed can be cancelled; one that arrives replaces its echo.
     for nonce in ["100", "101"] {
@@ -649,7 +651,54 @@ fn a_page_asked_for_before_a_delete_doesnt_bring_the_message_back() {
     });
     open.deleted("3");
     open.loaded(Load::Latest, shown(page(1..=4)));
-    assert!(open.shown.messages.keys().eq(&[1, 4]));
+    // The page doesn't bring back the message this account deleted; the
+    // one someone else deleted the message logger keeps, marked.
+    assert!(open.shown.messages.keys().eq(&[1, 2, 4]));
+    assert!(open.shown.messages[&2].deleted);
+}
+
+#[test]
+fn the_message_logger_keeps_what_an_edit_replaced() {
+    let mut open = OpenChannel::new("discord:10:11").unwrap();
+    open.loaded(Load::Latest, shown(page(1..=2)));
+    let edit = |content: &str| {
+        Live::Updated(Message {
+            content: content.into(),
+            edited: true,
+            ..message("2", None)
+        })
+    };
+    assert!(open.live(&edit("first edit")));
+    assert!(open.live(&edit("second edit")));
+    // An update that only adds embeds says the same, and keeps nothing.
+    open.live(&edit("second edit"));
+    let two = &open.shown.messages[&2];
+    assert_eq!(two.content, "second edit");
+    assert_eq!(two.history, ["2", "first edit"]);
+    // A GIF link whose preview arrives loses its text, unedited: nothing
+    // is kept, and no "(edited)".
+    open.live(&Live::Created(Message {
+        content: "https://media.discordapp.net/cat.gif".into(),
+        ..message("3", None)
+    }));
+    open.live(&Live::Updated(Message {
+        content: String::new(),
+        ..message("3", None)
+    }));
+    assert!(open.shown.messages[&3].history.is_empty());
+}
+
+#[test]
+fn a_message_the_logger_kept_leaves_the_log_without_asking_discord() {
+    let mut open = OpenChannel::new("discord:10:11").unwrap();
+    open.loaded(Load::Latest, shown(page(1..=2)));
+    open.live(&Live::Deleted {
+        channel: "11".into(),
+        id: "2".into(),
+    });
+    assert!(open.shown.messages[&2].deleted);
+    open.deleted("2");
+    assert!(open.shown.messages.keys().eq(&[1]));
 }
 
 #[test]

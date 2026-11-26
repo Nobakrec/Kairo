@@ -198,6 +198,14 @@ pub struct Message {
     /// What a voice message's recording, its first attachment, sounds like.
     #[serde(default)]
     pub voice: Option<VoiceMessage>,
+    /// Deleted while it showed, and kept by the message logger; see
+    /// [`crate::message_log`].
+    #[serde(default)]
+    pub deleted: bool,
+    /// What it said before each edit this session saw, oldest first, as
+    /// the message logger keeps them.
+    #[serde(default)]
+    pub history: Vec<String>,
 }
 
 /// The interaction an app's message answers, from its
@@ -972,6 +980,8 @@ pub fn parse(value: &Value) -> Option<Message> {
         ephemeral: value["flags"].as_u64().unwrap_or_default() & EPHEMERAL != 0,
         loading: value["flags"].as_u64().unwrap_or_default() & LOADING != 0,
         voice: VoiceMessage::of(shown),
+        deleted: false,
+        history: Vec::new(),
     })
 }
 

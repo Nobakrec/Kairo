@@ -22,6 +22,7 @@ pub(super) use account::BLOCKED_STEP;
 mod advanced;
 mod discord;
 mod games;
+mod kairo;
 pub use games::{block_game, open_detected_games_menu};
 mod messages;
 mod notifications;
@@ -70,6 +71,8 @@ pub enum Pref {
     StartOnSignIn(bool),
     DiscordLinks(bool),
     SystemTitleBar(bool),
+    /// One of Kairo's switches; see [`crate::kairo`].
+    Kairo(crate::kairo::Switch, bool),
 }
 
 /// My account's and the Discord page's buttons.
@@ -257,6 +260,10 @@ impl Settings {
             Pref::MultipleWindows(on) => {
                 prefs.multiple_windows = on;
                 cx.keep("multiple_windows", on);
+            }
+            Pref::Kairo(switch, on) => {
+                cx.layout.kairo.set(switch, on);
+                cx.keep("kairo", cx.layout.kairo);
             }
             Pref::DeveloperMode(on) => {
                 cx.layout.developer_mode = on;
