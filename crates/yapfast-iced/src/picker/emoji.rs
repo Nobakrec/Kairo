@@ -485,12 +485,25 @@ impl Picker {
 
     pub(super) fn emoji_pick(&self, index: usize, cx: &mut Cx<'_>) -> Task<Message> {
         match self.emoji_cell(index) {
+            // A custom emoji goes as its picture's link where this account
+            // can't use it, or always with `YAPFAST_EMOJI_LINKS=always`.
+            Some((Face::Custom(emoji), usable)) if self.links_emoji(usable) => {
+                self.place_emoji(yapfast_core::emoji::emoji_link(emoji), cx)
+            }
             Some((face, true)) => {
                 let key = face.key();
                 self.place_emoji(key, cx)
             }
             _ => Task::none(),
         }
+    }
+
+    /// Whether a custom emoji, usable here or not, goes as a link: only
+    /// into a message being written or edited, since a reaction, a status
+    /// or a poll answer can't be a link.
+    pub(super) fn links_emoji(&self, usable: bool) -> bool {
+        matches!(self.target, Target::Composer | Target::Edit)
+            && (!usable || yapfast_core::emoji::links_always())
     }
 
     /// Enter picks the first match.
@@ -636,7 +649,11 @@ impl<'a> View<'a> {
                         .padding(0)
                         .width(CELL)
                         .height(CELL)
-                        .on_press_maybe(usable.then_some(Message::Picker(Event::Pick(index))))
+                        .on_press_maybe(
+                            (*usable
+                                || (matches!(face, Face::Custom(_)) && picker.links_emoji(false)))
+                            .then_some(Message::Picker(Event::Pick(index))),
+                        )
                         .style(lit_style(None, wash, 6.0));
                     let mut layers = stack![cell];
                     if *favorite || picker.hover == Some(index) {

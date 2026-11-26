@@ -51,6 +51,9 @@ pub enum Item {
         picture: String,
         usable: bool,
         favorite: bool,
+        /// Its picture's link, sent in its place where it isn't usable;
+        /// see `yapfast_core::emoji::sticker_link`.
+        link: Option<String>,
     },
 }
 
@@ -155,6 +158,7 @@ impl Picker {
                         picture: sticker.picture.clone(),
                         usable: *usable,
                         favorite: favorites.iter().any(|known| known.id == sticker.id),
+                        link: yapfast_core::emoji::sticker_link(sticker),
                     },
                 );
             }
@@ -214,11 +218,22 @@ impl Picker {
 
     pub(super) fn sticker_pick(&self, index: usize, cx: &mut Cx<'_>) -> Task<Message> {
         let Some(Item::Sticker {
-            id, usable: true, ..
+            id, usable, link, ..
         }) = self.sticker_item(index)
         else {
             return Task::none();
         };
+        // One this account can't send goes as its picture's link, into
+        // the message being written; or always with
+        // `YAPFAST_EMOJI_LINKS=always`.
+        if let Some(link) = link
+            && (!usable || yapfast_core::emoji::links_always())
+        {
+            return self.place_emoji(link.clone(), cx);
+        }
+        if !usable {
+            return Task::none();
+        }
         let id = id.clone();
         cx.dispatch(Action::PickSticker(id));
         self.ask_close(cx)
@@ -311,6 +326,7 @@ impl<'a> View<'a> {
                     picture,
                     usable,
                     favorite,
+                    link,
                     ..
                 } => {
                     let shown = match state.stickers.pictures.get(picture) {
@@ -344,7 +360,10 @@ impl<'a> View<'a> {
                         .padding(0)
                         .width(TILE)
                         .height(TILE)
-                        .on_press_maybe(usable.then_some(Message::Picker(Event::Pick(index))))
+                        .on_press_maybe(
+                            (*usable || link.is_some())
+                                .then_some(Message::Picker(Event::Pick(index))),
+                        )
                         .style(lit_style(None, hover, 8.0));
                     let mut layers = stack![tile];
                     if picker.hover == Some(index) {
