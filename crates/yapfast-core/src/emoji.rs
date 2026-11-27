@@ -25,11 +25,68 @@ pub fn custom_key(emoji: &CustomEmoji) -> String {
 
 /// What an emoji puts in the composer: the emoji itself, or a custom emoji's
 /// `:name:`, which goes out in Discord's form; see `crate::chat::wire_emoji`.
+/// A link (an emoji or sticker this account can't use, as [`emoji_link`]
+/// makes it) goes in as it is.
 pub fn composer_text(key: &str) -> String {
+    if is_link(key) {
+        return key.to_owned();
+    }
     match key.split_once(':') {
         Some((name, _)) => format!(":{name}:"),
         None => key.to_owned(),
     }
+}
+
+/// Whether `key` is a link that [`emoji_link`] or [`sticker_link`] made,
+/// rather than an emoji's key.
+pub fn is_link(key: &str) -> bool {
+    key.starts_with("https://")
+}
+
+/// A custom emoji's picture as a link to send in its place, where this
+/// account can't use it (another server's, or an animated one, without
+/// Nitro): Discord shows the link as the picture. The size is that of a
+/// large emoji in a message; `name` keeps its name for the picture's alt
+/// text.
+pub fn emoji_link(emoji: &CustomEmoji) -> String {
+    let name = emoji.text.trim_matches(':');
+    let animated = if emoji.animated { "&animated=true" } else { "" };
+    format!(
+        "https://cdn.discordapp.com/emojis/{}.webp?size=48{animated}&name={name}",
+        emoji.id
+    )
+}
+
+/// A sticker's picture as a link to send in its place, where this account
+/// can't send it. A Lottie sticker (format 3) has no picture Discord would
+/// show from a link, so it has none.
+pub fn sticker_link(sticker: &crate::chat::Sticker) -> Option<String> {
+    let extension = match sticker.format {
+        1 | 2 => "png",
+        4 => "gif",
+        _ => return None,
+    };
+    Some(format!(
+        "https://media.discordapp.net/stickers/{}.{extension}?size=160",
+        sticker.id
+    ))
+}
+
+static LINKS_ALWAYS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether every custom emoji and sticker goes as a link, even ones this
+/// account could use, as Settings → Kairo can have it to try links with
+/// Nitro; `YAPFAST_EMOJI_LINKS=always` does too. Otherwise only the ones
+/// it can't use do.
+pub fn links_always() -> bool {
+    LINKS_ALWAYS.load(std::sync::atomic::Ordering::Relaxed)
+        || std::env::var("YAPFAST_EMOJI_LINKS").is_ok_and(|value| value == "always")
+}
+
+/// Has every custom emoji and sticker go as a link, or only those this
+/// account can't use.
+pub fn set_links_always(on: bool) {
+    LINKS_ALWAYS.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// An emoji's name as a picker shows it: "Thumbs up", or a custom one's
@@ -300,6 +357,47 @@ mod tests {
             usable,
             picture: String::new(),
         }
+    }
+
+    #[test]
+    fn emoji_links() {
+        let mut emoji = custom(":pog:", "123", false);
+        assert_eq!(
+            emoji_link(&emoji),
+            "https://cdn.discordapp.com/emojis/123.webp?size=48&name=pog"
+        );
+        emoji.animated = true;
+        assert_eq!(
+            emoji_link(&emoji),
+            "https://cdn.discordapp.com/emojis/123.webp?size=48&animated=true&name=pog"
+        );
+        // A link goes into the composer as it is; a key still becomes `:name:`.
+        assert_eq!(composer_text(&emoji_link(&emoji)), emoji_link(&emoji));
+        assert_eq!(composer_text("pog:123"), ":pog:");
+    }
+
+    #[test]
+    fn sticker_links() {
+        let mut sticker = crate::chat::Sticker {
+            id: "9".into(),
+            format: 1,
+            ..Default::default()
+        };
+        assert_eq!(
+            sticker_link(&sticker).as_deref(),
+            Some("https://media.discordapp.net/stickers/9.png?size=160")
+        );
+        sticker.format = 4;
+        assert_eq!(
+            sticker_link(&sticker).as_deref(),
+            Some("https://media.discordapp.net/stickers/9.gif?size=160")
+        );
+        sticker.format = 3;
+        assert_eq!(
+            sticker_link(&sticker),
+            None,
+            "Lottie has no picture to link"
+        );
     }
 
     #[test]

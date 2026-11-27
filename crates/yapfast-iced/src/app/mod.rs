@@ -288,6 +288,7 @@ impl App {
         // How calls send and play, as Voice's settings keep it; message
         // times on the clock Messages chose; the games named by hand.
         layout.voice.apply();
+        layout.kairo.apply();
         layout.prefs.apply_clock();
         yapfast_core::discord::set_custom_games(&layout.prefs.game_executables);
         layout.prefs.apply_blocked_games();

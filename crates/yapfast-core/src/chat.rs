@@ -1259,6 +1259,9 @@ pub struct Reply {
     pub color: Option<u32>,
     /// The author's server tag, which Discord's quote shows after the name.
     pub tag: Option<ServerTag>,
+    /// When the original was sent, in seconds since the Unix epoch; zero
+    /// when unknown. Kairo's reply times show it.
+    pub sent: u64,
 }
 
 /// Who used which Discord app command a message answers, as the line
@@ -2119,6 +2122,19 @@ pub struct ChatMessage {
     pub own: bool,
     pub edited: bool,
     pub deleted: bool,
+    /// Deleted, and kept by the message logger, which shows it in red with
+    /// what it said; see `yapfast_discord::message_log`.
+    pub logged: bool,
+    /// What it said before each edit, oldest first, as the message logger
+    /// keeps them.
+    pub edits: Vec<String>,
+    /// The author's username, where it isn't the name shown, which Kairo
+    /// shows beside it.
+    pub username: Option<String>,
+    /// What its author wrote, as Discord keeps it: Markdown with mentions
+    /// as `<@id>` and custom emoji as `<:name:id>`, which Kairo's Copy Raw
+    /// Text copies. Empty where there's none.
+    pub raw: String,
     /// From someone this account blocked: it shows collapsed until asked for.
     pub blocked: bool,
     /// From someone this account ignored: it shows collapsed until revealed.

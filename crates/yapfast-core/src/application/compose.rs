@@ -384,6 +384,7 @@ impl Application {
                         emoji,
                         ..
                     }) => Some(Reply {
+                        sent: 0,
                         author,
                         avatar: self
                             .state

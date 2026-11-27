@@ -97,6 +97,7 @@ pub enum Section {
     Games,
     Keybinds,
     About,
+    Kairo,
 }
 
 impl Section {
@@ -123,6 +124,7 @@ impl Section {
             Section::Games => "Game Activity",
             Section::Keybinds => "Keybinds",
             Section::About => "About",
+            Section::Kairo => "Kairo",
         }
     }
 
@@ -140,14 +142,16 @@ impl Section {
             Section::Games => Icon::Play,
             Section::Keybinds => Icon::Keyboard,
             Section::About => Icon::Help,
+            Section::Kairo => Icon::Gem,
         }
     }
 }
 
 /// The column's groups and their sections, as Discord's settings group
 /// them.
-const GROUPS: [(&str, &[Section]); 3] = [
+const GROUPS: [(&str, &[Section]); 4] = [
     ("Account", &[Section::Account]),
+    ("Kairo", &[Section::Kairo]),
     (
         "Experience",
         &[
@@ -540,6 +544,7 @@ impl<'a> Page<'a> {
             Section::Games => self.games_page(),
             Section::Keybinds => self.keybinds_page(),
             Section::About => self.about_page(),
+            Section::Kairo => self.kairo_page(),
         };
         let line = bar(theme.line, Length::Fill, 1);
         let header = column![

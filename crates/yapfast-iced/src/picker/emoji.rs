@@ -485,12 +485,25 @@ impl Picker {
 
     pub(super) fn emoji_pick(&self, index: usize, cx: &mut Cx<'_>) -> Task<Message> {
         match self.emoji_cell(index) {
+            // A custom emoji goes as its picture's link where this account
+            // can't use it, or always with `YAPFAST_EMOJI_LINKS=always`.
+            Some((Face::Custom(emoji), usable)) if self.links_emoji(usable) => {
+                self.place_emoji(yapfast_core::emoji::emoji_link(emoji), cx)
+            }
             Some((face, true)) => {
                 let key = face.key();
                 self.place_emoji(key, cx)
             }
             _ => Task::none(),
         }
+    }
+
+    /// Whether a custom emoji, usable here or not, goes as a link: only
+    /// into a message being written or edited, since a reaction, a status
+    /// or a poll answer can't be a link.
+    pub(super) fn links_emoji(&self, usable: bool) -> bool {
+        matches!(self.target, Target::Composer | Target::Edit)
+            && (!usable || yapfast_core::emoji::links_always())
     }
 
     /// Enter picks the first match.
@@ -610,7 +623,11 @@ impl<'a> View<'a> {
                     usable,
                     favorite,
                 } => {
-                    let fade = if *usable { 1.0 } else { 0.4 };
+                    // One that goes as a link where it isn't usable shows
+                    // as any other: no grey, no lock.
+                    let pickable =
+                        *usable || (matches!(face, Face::Custom(_)) && picker.links_emoji(false));
+                    let fade = if pickable { 1.0 } else { 0.4 };
                     // An animated custom emoji plays in its cell, greyed
                     // or not; the rail and the foot show its still.
                     let playing = match face {
@@ -624,7 +641,7 @@ impl<'a> View<'a> {
                         None => self.face_view(tab, face, CELL, GLYPH, fade),
                     };
                     let mut face_shown = stack![shown];
-                    if !usable {
+                    if !pickable {
                         face_shown = face_shown.push(kit::pinned(
                             self.cx.look.glyph(Icon::Lock, 14, theme.text),
                             Alignment::End,
@@ -636,7 +653,7 @@ impl<'a> View<'a> {
                         .padding(0)
                         .width(CELL)
                         .height(CELL)
-                        .on_press_maybe(usable.then_some(Message::Picker(Event::Pick(index))))
+                        .on_press_maybe(pickable.then_some(Message::Picker(Event::Pick(index))))
                         .style(lit_style(None, wash, 6.0));
                     let mut layers = stack![cell];
                     if *favorite || picker.hover == Some(index) {

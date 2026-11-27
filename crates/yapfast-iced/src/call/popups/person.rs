@@ -224,9 +224,12 @@ pub fn choose_voice(
 pub fn volumes_view<'a>(ctx: crate::ctx::Ctx<'a>, volumes: &'a Volumes) -> Element<'a, Message> {
     let theme = ctx.look.theme;
     let slider = |label, stream: bool, value| {
-        controls::slider(label, value, 200, move |value| {
-            Message::Call(Event::Volume(stream, value, false))
-        })
+        controls::slider(
+            label,
+            value,
+            ctx.layout.kairo.person_slider(),
+            move |value| Message::Call(Event::Volume(stream, value, false)),
+        )
         .on_release(Message::Call(Event::Volume(stream, value, true)))
         .view(theme)
     };

@@ -1257,6 +1257,7 @@ impl Tracker {
         let Some(user) = user else {
             return false;
         };
+        crate::platforms::record(user, data);
         let presence = Known {
             presence: Presence::parse(data),
             activity: member_list::activity(&data["activities"]),

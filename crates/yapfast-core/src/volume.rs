@@ -1,5 +1,5 @@
 //! How loud each person sounds in calls, and their stream's sound, as the
-//! gain they play at: 1.0 as they come, 0.0 silent, up to [`MAX`]. People are
+//! gain they play at: 1.0 as they come, 0.0 silent, up to [`person_max`]. People are
 //! named as their network does, by Discord user id or Matrix user id. The UI
 //! remembers the choices and sets them here; the calls' audio reads them as
 //! it plays. Its sliders show them on Discord's scale; see [`from_slider`].
@@ -17,8 +17,18 @@ use std::{
 
 use tokio::sync::watch;
 
-/// Twice as loud, as Discord allows.
+/// Twice as loud, as Discord allows: the microphone and the speakers.
 pub const MAX: f32 = 2.0;
+
+/// How far a person's voice and stream sliders go: 400 rather than
+/// Discord's 200, as Vencord's VolumeBooster allows, for someone too quiet
+/// even at 200. 400 plays about 8 times as loud; see [`from_slider`].
+pub const PERSON_SLIDER: u32 = 400;
+
+/// The loudest a person's voice or stream plays: [`PERSON_SLIDER`]'s gain.
+pub fn person_max() -> f32 {
+    from_slider(PERSON_SLIDER as f32)
+}
 
 /// The gain of a slider at `value`, from 0 to 200, as Discord's volume
 /// sliders map it: below 100 on a power curve, `(value / 100)^2.8`, so 50 is
@@ -83,7 +93,7 @@ fn volumes(kind: Kind) -> &'static RwLock<HashMap<String, f32>> {
 
 /// Sets how loud `person` sounds; the default gain forgets the choice.
 pub fn set(kind: Kind, person: &str, volume: f32) {
-    let volume = volume.clamp(0.0, MAX);
+    let volume = volume.clamp(0.0, person_max());
     {
         let mut volumes = volumes(kind).write().unwrap();
         if (volume - kind.default_gain()).abs() < f32::EPSILON {
@@ -195,11 +205,14 @@ mod tests {
         assert!(changes.has_changed().unwrap());
         changes.mark_unchanged();
         assert_eq!(get(Kind::Voice, "volume-test-1"), 0.5);
+        assert_eq!(get(Kind::Stream, "volume-test-1"), 3.0, "boosted past 2");
+        set(Kind::Stream, "volume-test-1", 100.0);
         assert_eq!(
             get(Kind::Stream, "volume-test-1"),
-            MAX,
-            "at most twice as loud"
+            person_max(),
+            "at most the top of the slider"
         );
+        assert!((person_max() - 7.943).abs() < 0.01, "400 is about 8 times");
         assert_eq!(
             get(Kind::Voice, "volume-test-2"),
             1.0,
