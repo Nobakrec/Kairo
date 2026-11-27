@@ -95,6 +95,43 @@ $numeric = ($version -split '-')[0] + '.0'
 & $iscc /Q "/DAppVersion=$version" "/DVersionNumber=$numeric" "/DSourceDir=$package" `
     "/DLicenseFile=$root\LICENSE" "/O$dist" (Join-Path $root 'packaging\windows\kairo.iss')
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup couldn't make the installer; see the errors above." }
+$setup = Join-Path $dist "Kairo-$version-windows-x64-setup.exe"
+
+# SHA256SUMS.txt + a minisign signature, so installed copies can auto-update
+# from your GitHub releases. The signing key lives in packaging\keys\kairo.key
+# (gitignored). Without it, the installer is still produced; it just won't be
+# signed for auto-update.
+$sums = Join-Path $dist 'SHA256SUMS.txt'
+$hash = (Get-FileHash -Algorithm SHA256 $setup).Hash.ToLower()
+"$hash  $(Split-Path $setup -Leaf)" | Set-Content -Path $sums -Encoding ascii -NoNewline
+Add-Content -Path $sums -Value "`n" -NoNewline
+$key = Join-Path $root 'packaging\keys\kairo.key'
+if (Test-Path $key) {
+    function Find-Minisign {
+        $c = Get-Command minisign -ErrorAction SilentlyContinue
+        if ($c) { return $c.Source }
+        @("$env:LOCALAPPDATA\Microsoft\WinGet\Links\minisign.exe",
+          "$env:ProgramFiles\minisign\minisign.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+    }
+    $minisign = Find-Minisign
+    if (-not $minisign) {
+        Write-Host 'Installing minisign, which signs the release...'
+        winget install --id jedisct1.minisign -e --scope user --accept-source-agreements --accept-package-agreements | Out-Null
+        $minisign = Find-Minisign
+    }
+    if ($minisign) {
+        # The trusted comment must be exactly this for Kairo's updater to accept it.
+        & $minisign -S -W -s $key -m $sums -t "yapfast v$version SHA256SUMS.txt" -c "Kairo v$version"
+        if ($LASTEXITCODE -eq 0) { Write-Host 'Signed SHA256SUMS.txt for auto-update.' }
+        else { Write-Warning 'Signing failed; the installer is fine, but auto-update needs a valid signature.' }
+    } else {
+        Write-Warning 'minisign not found; skipped signing. Install it and re-run to enable auto-update.'
+    }
+} else {
+    Write-Host 'No signing key at packaging\keys\kairo.key; skipping the auto-update signature.'
+    Write-Host 'Friends can still install the .exe; auto-update just needs the key.'
+}
 Write-Host ''
-Write-Host "Done: $dist\Kairo-$version-windows-x64-setup.exe"
+Write-Host "Done. Upload everything in this folder to a GitHub Release:"
+Write-Host "  $dist"
 explorer.exe $dist

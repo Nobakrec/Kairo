@@ -518,6 +518,55 @@ fn preview_and_voice_switching_need_no_backend_and_voice_survives_navigation() {
     assert!(!app.state.voice.active());
 }
 
+/// Kairo watches one stream at a time: a second always replaces the
+/// first, and "watch alongside" does too.
+#[test]
+fn a_second_stream_replaces_the_first() {
+    let mut app = connected();
+    let watching = |users: &[&str]| -> Vec<voice::Watching> {
+        users
+            .iter()
+            .map(|&user| voice::Watching {
+                user: user.into(),
+                name: user.into(),
+                opening: false,
+                frames: None,
+                viewers: vec![],
+            })
+            .collect()
+    };
+    let commands = |effects: Vec<Effect>| -> Vec<voice::Command> {
+        effects
+            .into_iter()
+            .filter_map(|effect| match effect {
+                Effect::Backend(Command::Voice(command)) => Some(command),
+                _ => None,
+            })
+            .collect()
+    };
+    let watch = |user: &str| Action::Voice(voice::Command::Watch(user.into()));
+    app.state.voice = voice::State {
+        phase: Phase::Connected,
+        room: Some("lounge".into()),
+        watching: watching(&["sam"]),
+        ..Default::default()
+    };
+    assert!(matches!(
+        commands(app.dispatch(watch("kim"))).as_slice(),
+        [voice::Command::StopWatching(sam), voice::Command::Watch(kim)] if sam == "sam" && kim == "kim"
+    ));
+    // "Watch alongside" also replaces rather than stacking.
+    assert!(matches!(
+        commands(app.dispatch(Action::WatchAlongside("kim".into()))).as_slice(),
+        [voice::Command::StopWatching(sam), voice::Command::Watch(kim)] if sam == "sam" && kim == "kim"
+    ));
+    app.state.voice.watching = watching(&[]);
+    assert!(matches!(
+        commands(app.dispatch(watch("lee"))).as_slice(),
+        [voice::Command::Watch(lee)] if lee == "lee"
+    ));
+}
+
 #[test]
 fn streams_sound_as_others_start_and_stop_watching() {
     let mut app = connected();
@@ -553,15 +602,16 @@ fn streams_sound_as_others_start_and_stop_watching() {
             frames: frames.clone(),
             viewers: viewers.iter().map(|&viewer| viewer.into()).collect(),
         }),
-        watching: watching.map(|viewers| {
-            Box::new(voice::Watching {
+        watching: watching
+            .map(|viewers| voice::Watching {
                 user: "sam".into(),
                 name: "sam".into(),
                 opening: false,
                 frames: None,
                 viewers: viewers.iter().map(|&viewer| viewer.into()).collect(),
             })
-        }),
+            .into_iter()
+            .collect(),
         ..Default::default()
     };
     let mut heard = |state: voice::State| sounds(&app.apply(Event::Voice(state)));

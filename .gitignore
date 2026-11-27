@@ -21,3 +21,6 @@ target/
 /experiments/
 /inspirations/
 /result
+
+# Kairo release signing private key — never commit
+/packaging/keys/kairo.key

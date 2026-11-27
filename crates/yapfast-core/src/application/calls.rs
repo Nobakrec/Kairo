@@ -98,7 +98,7 @@ fn viewer_sound(before: &voice::State, after: &voice::State) -> Option<Sound> {
         let mine = state.sharing.as_ref().map(|_| None);
         let watched = state
             .watching
-            .as_ref()
+            .iter()
             .map(|watching| Some(watching.user.clone()));
         mine.into_iter().chain(watched).collect()
     };
@@ -253,9 +253,32 @@ impl Application {
                         .any(|person| &person.id == user && person.streaming)
             });
         match self.state.pending_watch.take_if(|_| ready) {
-            Some((_, user)) => self.voice_command(voice::Command::Watch(user)),
+            Some((_, user)) => self.watch(user, false),
             None => vec![],
         }
+    }
+
+    /// Watches `user`'s stream. Kairo watches one stream at a time: a new
+    /// one takes the place of any already watched, rather than playing
+    /// beside them, to keep memory down. (Upstream Yapfast can watch
+    /// several at once; `alongside` is ignored here.)
+    pub(super) fn watch(&mut self, user: String, _alongside: bool) -> Vec<Effect> {
+        // The streams to stop, taken now so the borrow ends before the
+        // mutable voice_command calls below.
+        let others: Vec<String> = self
+            .state
+            .voice
+            .watching
+            .iter()
+            .map(|watching| watching.user.clone())
+            .filter(|watched| *watched != user)
+            .collect();
+        let mut effects = Vec::new();
+        for other in others {
+            effects.extend(self.voice_command(voice::Command::StopWatching(other)));
+        }
+        effects.extend(self.voice_command(voice::Command::Watch(user)));
+        effects
     }
 
     /// A call command, with the sound of muting or deafening in a call.
